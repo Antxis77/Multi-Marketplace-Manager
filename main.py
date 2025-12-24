@@ -12,18 +12,23 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# --- CONFIGURATION ---
-def get_config_id():
-    if not os.path.exists("config.txt"):
-        with open("config.txt", "w") as f: f.write("ID_MEMBRE=1")
-        return "1"
-    with open("config.txt", "r") as f:
-        for line in f:
-            if "ID_MEMBRE" in line: return line.split("=")[1].strip()
-    return "1"
+# --- GESTION DE LA CONFIGURATION ---
+def get_config():
+    config = {"ID_MEMBRE": "1", "CHROME_PATH": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
+    if os.path.exists("config.txt"):
+        with open("config.txt", "r") as f:
+            for line in f:
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    config[key.strip()] = val.strip()
+    else:
+        save_config(config["ID_MEMBRE"], config["CHROME_PATH"])
+    return config
 
-def set_config_id(new_id):
-    with open("config.txt", "w") as f: f.write(f"ID_MEMBRE={new_id}")
+def save_config(member_id, chrome_path):
+    with open("config.txt", "w") as f:
+        f.write(f"ID_MEMBRE={member_id}\n")
+        f.write(f"CHROME_PATH={chrome_path}\n")
 
 class VintedProBot:
     def __init__(self):
@@ -31,7 +36,9 @@ class VintedProBot:
         self.load_account_config()
 
     def load_account_config(self):
-        self.member_id = get_config_id()
+        config = get_config()
+        self.member_id = config["ID_MEMBRE"]
+        self.chrome_path = config["CHROME_PATH"]
         self.base_dir = os.path.abspath(f"vinted_backup/{self.member_id}")
         self.profile_dir = os.path.abspath(f"chrome_profile/{self.member_id}")
         self.csv_path = os.path.join(self.base_dir, "inventaire.csv")
@@ -43,22 +50,30 @@ class VintedProBot:
 
     def start_driver(self):
         if not self.driver:
-            print(f"🚀 Lancement Chrome Anti-Détection | Profil : {self.member_id}...")
+            print(f"🚀 Lancement Chrome | Profil : {self.member_id}")
+            print(f"📍 Chemin Chrome : {self.chrome_path}")
             options = uc.ChromeOptions()
             options.add_argument(f"--user-data-dir={self.profile_dir}")
             options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            
+            # Utilisation du chemin configuré
+            options.binary_location = self.chrome_path
             options.add_argument("--window-size=1920,1080")
-            self.driver = uc.Chrome(options=options, use_subprocess=True)
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            try:
+                self.driver = uc.Chrome(options=options, use_subprocess=True)
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            except Exception as e:
+                print(f"❌ Erreur au lancement de Chrome. Vérifiez le chemin dans l'option [P].\nErreur: {e}")
 
+    # --- MÉTHODES DE REMPLISSAGE ---
     def human_type(self, element, text):
         element.clear()
         time.sleep(0.5)
         for char in text:
             element.send_keys(char)
-            time.sleep(random.uniform(0.1, 0.25))
+            time.sleep(random.uniform(0.1, 0.2))
 
     def fast_copy_paste(self, element, text):
         self.driver.execute_script("arguments[0].value = arguments[1];", element, text)
@@ -97,48 +112,40 @@ class VintedProBot:
             writer.writerows(rows)
 
     def sync_cleanup(self, online_urls):
-        """Supprime du CSV les articles qui ne sont plus en ligne"""
         if not os.path.exists(self.csv_path): return
-        print("🧹 Nettoyage de l'inventaire (recherche d'articles vendus/supprimés)...")
+        print("🧹 Synchronisation de l'inventaire...")
         rows_to_keep = []
         count_removed = 0
         with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             fieldnames = reader.fieldnames
             for row in reader:
-                if row['URL'] in online_urls:
-                    rows_to_keep.append(row)
-                else:
-                    count_removed += 1
-        
+                if row['URL'] in online_urls: rows_to_keep.append(row)
+                else: count_removed += 1
         if count_removed > 0:
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(rows_to_keep)
-            print(f"✅ Nettoyage terminé : {count_removed} article(s) retiré(s) du fichier car absents de Vinted.")
-        else:
-            print("✅ Inventaire déjà à jour, rien à supprimer.")
+            print(f"✅ {count_removed} article(s) retiré(s) (vendus/supprimés).")
 
     def fill_vinted_form(self, item):
         item_id = self.extract_id(item['URL'])
         try:
-            print(f"\n📢 Remplissage : {item['Titre'][:30]}... [ID: {item_id}]")
+            print(f"\n📢 En cours : {item['Titre'][:30]}... [ID: {item_id}]")
             self.driver.get("https://www.vinted.fr/items/new")
             WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))).send_keys("\n".join(item['Images'].split(";")))
-            print("⏳ Upload Photos (7s)...")
+            print("⏳ Photos (7s)...")
             time.sleep(7) 
-            time.sleep(random.uniform(1.5, 3.0))
             self.fast_copy_paste(self.driver.find_element(By.ID, "title"), item['Titre'])
-            time.sleep(random.uniform(1.5, 3.0))
+            time.sleep(random.uniform(1.0, 2.0))
             self.fast_copy_paste(self.driver.find_element(By.ID, "description"), item['Description'])
             time.sleep(random.uniform(1.0, 2.0))
-            price_el = self.driver.find_element(By.NAME, "price")
-            self.human_type(price_el, item['Prix'].replace(',', '.'))
+            self.human_type(self.driver.find_element(By.NAME, "price"), item['Prix'].replace(',', '.'))
             print(f"✨ Formulaire prêt !")
-            input(f"✅ Validez 'Ajouter' sur Chrome, puis ENTRÉE ici pour supprimer l'ID {item_id}...")
+            input(f"✅ Validez sur Chrome, puis ENTRÉE ici pour supprimer l'ID {item_id}...")
             self.remove_from_csv(item['URL'])
-        except Exception as e: print(f"⚠️ Erreur : {e}")
+        except Exception as e: print(f"⚠️ Erreur formulaire : {e}")
 
     def scroll_to_bottom(self):
         last_height = self.driver.execute_script("return document.body.scrollHeight")
@@ -151,11 +158,10 @@ class VintedProBot:
 
     def get_items_urls(self):
         self.driver.get(f"https://www.vinted.fr/member/{self.member_id}")
-        time.sleep(random.uniform(4.0, 6.0))
+        time.sleep(5)
         self.scroll_to_bottom()
         items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
         urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
-        # Lancer le nettoyage automatique après avoir récupéré la liste fraîche
         self.sync_cleanup(urls)
         return urls
 
@@ -170,8 +176,8 @@ class VintedProBot:
                 writer.writerow(["Titre", "Prix", "Description", "Images", "URL", "Date_Ajout"])
             for i, url in enumerate(urls):
                 if url in history: continue
-                print(f"🔍 Scan article {i+1}/{len(urls)}... (Sécurité)")
-                time.sleep(random.uniform(7.0, 14.0)) # Délai plus long pour éviter le ban
+                print(f"🔍 Scan article {i+1}/{len(urls)}...")
+                time.sleep(random.uniform(8.0, 15.0))
                 self.driver.get(url)
                 try:
                     title = self.driver.title.split('|')[0].strip()
@@ -200,17 +206,18 @@ class VintedProBot:
 
     def run_menu(self):
         while True:
-            print("\n" + "═"*50)
-            print(f"   VINTED PRO v1.2 | COMPTE : {self.member_id}")
-            print("═"*50)
-            print(" 0. 🔑 Connexion / Chrome (Bypass Ban)")
-            print(" 1. 🚮 Reset Scan (Tout refaire + Nettoyage)")
-            print(" 2. 🔄 Scan Nouveau (Ajouter + Nettoyage)")
+            print("\n" + "═"*55)
+            print(f"   VINTED PRO v1.4 | COMPTE : {self.member_id}")
+            print("═"*55)
+            print(" 0. 🔑 Connexion / Chrome")
+            print(" 1. 🚮 Reset Scan (Tout refaire + Sync)")
+            print(" 2. 🔄 Scan Nouveau (Ajouter + Sync)")
             print(" 3. 🚀 Republier les X derniers")
             print(" 4. 📤 Republier par ID")
             print(" C. 👤 Changer de Compte")
+            print(" P. 📍 Modifier chemin Chrome")
             print(" Q. ❌ Quitter")
-            print("─"*50)
+            print("─"*55)
             c = input("\n Choix : ").upper()
             if c == "0": self.start_driver(); self.driver.get("https://www.vinted.fr")
             elif c == "1": self.start_driver(); self.save_process(self.get_items_urls(), True)
@@ -223,7 +230,7 @@ class VintedProBot:
                         annonces = list(csv.DictReader(f))[-int(num):]
                     for a in annonces:
                         self.driver.get(a['URL'])
-                        input(f"🗑️ Supprimez l'article {self.extract_id(a['URL'])} puis ENTRÉE...")
+                        input(f"🗑️ Supprimez l'ID {self.extract_id(a['URL'])} puis ENTRÉE...")
                         self.fill_vinted_form(a)
             elif c == "4":
                 item_id = input(" ID Article : ").strip()
@@ -233,8 +240,11 @@ class VintedProBot:
                         for row in csv.DictReader(f):
                             if item_id in row['URL']: self.fill_vinted_form(row); break
             elif c == "C":
-                new_id = input(" Nouvel ID : ").strip()
-                if new_id: set_config_id(new_id); self.load_account_config()
+                new_id = input(" Nouvel ID Membre : ").strip()
+                if new_id: save_config(new_id, self.chrome_path); self.load_account_config()
+            elif c == "P":
+                new_path = input(f" Chemin actuel : {self.chrome_path}\n Nouveau chemin : ").strip()
+                if new_path: save_config(self.member_id, new_path); self.load_account_config()
             elif c == "Q":
                 if self.driver: self.driver.quit()
                 break
