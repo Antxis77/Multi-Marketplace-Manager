@@ -198,7 +198,7 @@ class VintedProBot:
     def run_menu(self):
         while True:
             print("\n" + "═"*55)
-            print(f"   VINTED PRO v1.2 | OS: {platform.system()}")
+            print(f"   VINTED PRO v1.3 | OS: {platform.system()}")
             print("═"*55)
             print(" 0. 🔑 Connexion / Chrome")
             print(" 1. 🚮 Reset Scan (Tout refaire + Sync)")
