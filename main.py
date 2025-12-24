@@ -23,7 +23,8 @@ def get_config():
     config = {
         "ID_MEMBRE": "1", 
         "CHROME_PATH": default_path,
-        "CHROME_VERSION": "0" 
+        "CHROME_VERSION": "0",
+        "CSV_NAME": "inventaire"
     }
     
     if os.path.exists("config.txt"):
@@ -33,14 +34,15 @@ def get_config():
                     key, val = line.split("=", 1)
                     config[key.strip()] = val.strip()
     else:
-        save_config(config["ID_MEMBRE"], config["CHROME_PATH"], config["CHROME_VERSION"])
+        save_config(config["ID_MEMBRE"], config["CHROME_PATH"], config["CHROME_VERSION"], config["CSV_NAME"])
     return config
 
-def save_config(member_id, chrome_path, chrome_version):
+def save_config(member_id, chrome_path, chrome_version, csv_name):
     with open("config.txt", "w", encoding="utf-8") as f:
         f.write(f"ID_MEMBRE={member_id}\n")
         f.write(f"CHROME_PATH={chrome_path}\n")
         f.write(f"CHROME_VERSION={chrome_version}\n")
+        f.write(f"CSV_NAME={csv_name}\n")
 
 class VintedProBot:
     def __init__(self):
@@ -52,17 +54,30 @@ class VintedProBot:
         self.member_id = config["ID_MEMBRE"]
         self.chrome_path = config["CHROME_PATH"]
         self.chrome_version = int(config["CHROME_VERSION"])
+        self.csv_filename = f"{config.get('CSV_NAME', 'inventaire')}.csv"
+        
         self.base_dir = os.path.abspath(f"vinted_backup/{self.member_id}")
         self.profile_dir = os.path.abspath(f"chrome_profile/{self.member_id}")
-        self.csv_path = os.path.join(self.base_dir, "inventaire.csv")
+        self.csv_path = os.path.join(self.base_dir, self.csv_filename)
+        
         os.makedirs(self.base_dir, exist_ok=True)
         os.makedirs(self.profile_dir, exist_ok=True)
+        
         if self.driver:
             self.driver.quit()
             self.driver = None
 
+    def display_info(self):
+        print("\n" + "─"*55)
+        print("📊 PARAMÈTRES CHARGÉS :")
+        print(f"🔹 OS              : {platform.system()} {platform.release()}")
+        print(f"🔹 ID Vinted      : {self.member_id}")
+        print(f"🔹 Fichier Stock  : {self.csv_filename}")
+        print(f"🔹 Version Chrome : {self.chrome_version if self.chrome_version > 0 else 'Auto-détection'}")
+        print(f"🔹 Chemin Chrome  : {self.chrome_path}")
+        print("─"*55)
+
     def parse_vinted_date(self, text):
-        """ Transforme 'Il y a 2 jours' en date réelle dd-mm-yyyy """
         now = datetime.now()
         t = text.lower()
         try:
@@ -115,7 +130,7 @@ class VintedProBot:
 
     def sync_cleanup(self, online_urls):
         if not os.path.exists(self.csv_path): return
-        print("🧹 Nettoyage de l'inventaire...")
+        print(f"🧹 Nettoyage de l'inventaire ({self.csv_filename})...")
         rows_to_keep = []
         with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -160,6 +175,7 @@ class VintedProBot:
             writer.writerows(rows)
 
     def get_items_urls(self):
+        print(f"🔍 Accès au profil membre {self.member_id}...")
         self.driver.get(f"https://www.vinted.fr/member/{self.member_id}")
         time.sleep(5)
         last_height = self.driver.execute_script("return document.body.scrollHeight")
@@ -169,8 +185,14 @@ class VintedProBot:
             new_height = self.driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height: break
             last_height = new_height
+        
         items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
         urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
+        
+        # --- AJOUT DU COMPTEUR ---
+        print(f"✅ Scan terminé : {len(urls)} annonce(s) trouvée(s).")
+        # ------------------------
+        
         self.sync_cleanup(urls)
         return urls
 
@@ -191,7 +213,7 @@ class VintedProBot:
             
             for i, url in enumerate(urls):
                 if url in history: continue
-                print(f"🔍 Scan {i+1}/{len(urls)}... ID: {self.extract_id(url)}")
+                print(f"📦 Scraping {i+1}/{len(urls)}... ID: {self.extract_id(url)}")
                 time.sleep(random.uniform(8.0, 15.0))
                 self.driver.get(url)
                 try:
@@ -199,7 +221,6 @@ class VintedProBot:
                     price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
                     desc = self.driver.find_element(By.XPATH, "//div[@itemprop='description']").text
                     
-                    # Récupération de la date réelle (balise upload_date)
                     try:
                         date_text = self.driver.find_element(By.CSS_SELECTOR, "div[itemprop='upload_date'] span").text
                         real_date = self.parse_vinted_date(date_text)
@@ -222,6 +243,7 @@ class VintedProBot:
 
     def run_menu(self):
         while True:
+            self.display_info()
             print("\n" + "═"*55)
             print(f"   VINTED PRO v1.3 | COMPTE : {self.member_id}")
             print("═"*55)
@@ -231,7 +253,7 @@ class VintedProBot:
             print(" 3. 🚀 Republier les X derniers")
             print(" 4. 📤 Republier par ID article")
             print(" C. 👤 Changer de Compte")
-            print(" P. 📍 Modifier Chemin / Version Chrome")
+            print(" P. 📍 Paramètres (Chemin, Version, Fichier)")
             print(" Q. ❌ Quitter")
             print("─"*55)
             c = input("\n Choix : ").upper()
@@ -263,15 +285,19 @@ class VintedProBot:
             elif c == "C":
                 new_id = input(" Nouvel ID Membre Vinted : ").strip()
                 if new_id:
-                    save_config(new_id, self.chrome_path, self.chrome_version)
+                    config = get_config()
+                    save_config(new_id, self.chrome_path, self.chrome_version, config.get('CSV_NAME', 'inventaire'))
                     self.load_account_config()
                     print(f"✅ Compte basculé sur : {self.member_id}")
             elif c == "P":
-                print(f"\n1. Chemin : {self.chrome_path}\n2. Version : {self.chrome_version}")
-                opt = input("Modifier (1/2) : ")
+                config = get_config()
+                print(f"\n1. Chemin : {self.chrome_path}\n2. Version : {self.chrome_version}\n3. Nom CSV : {config.get('CSV_NAME', 'inventaire')}")
+                opt = input("Modifier (1/2/3) : ")
                 if opt == "1": self.chrome_path = input("Nouveau chemin : ").strip()
-                elif opt == "2": self.chrome_version = input("Version majeure (ex: 120) : ").strip()
-                save_config(self.member_id, self.chrome_path, self.chrome_version); self.load_account_config()
+                elif opt == "2": self.chrome_version = input("Version majeure : ").strip()
+                elif opt == "3": config['CSV_NAME'] = input("Nouveau nom CSV (sans .csv) : ").strip()
+                save_config(self.member_id, self.chrome_path, self.chrome_version, config.get('CSV_NAME', 'inventaire'))
+                self.load_account_config()
             elif c == "Q":
                 if self.driver: self.driver.quit()
                 break
