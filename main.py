@@ -189,10 +189,7 @@ class VintedProBot:
         items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
         urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
         
-        # --- AJOUT DU COMPTEUR ---
         print(f"✅ Scan terminé : {len(urls)} annonce(s) trouvée(s).")
-        # ------------------------
-        
         self.sync_cleanup(urls)
         return urls
 
@@ -200,46 +197,60 @@ class VintedProBot:
         if reset and os.path.exists(self.base_dir):
             shutil.rmtree(self.base_dir); os.makedirs(self.base_dir)
         
-        history = []
+        existing_rows = []
+        history_urls = []
+        fieldnames = ["Titre", "Prix", "Description", "Images", "URL", "Date_Ajout"]
+
+        # 1. Charger l'existant si on ne reset pas
         if not reset and os.path.exists(self.csv_path):
             with open(self.csv_path, 'r', encoding='utf-8') as f:
-                history = [row['URL'] for row in csv.DictReader(f)]
+                reader = csv.DictReader(f)
+                existing_rows = list(reader)
+                history_urls = [row['URL'] for row in existing_rows]
 
-        file_exists = os.path.exists(self.csv_path)
-        with open(self.csv_path, 'a' if file_exists and not reset else 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            if not file_exists or reset:
-                writer.writerow(["Titre", "Prix", "Description", "Images", "URL", "Date_Ajout"])
-            
-            for i, url in enumerate(urls):
-                if url in history: continue
-                print(f"📦 Scraping {i+1}/{len(urls)}... ID: {self.extract_id(url)}")
-                time.sleep(random.uniform(8.0, 15.0))
-                self.driver.get(url)
+        new_entries = []
+        # 2. Scanner les nouveaux
+        for i, url in enumerate(urls):
+            if url in history_urls: continue
+            print(f"📦 Scraping {i+1}/{len(urls)}... ID: {self.extract_id(url)}")
+            time.sleep(random.uniform(8.0, 15.0))
+            self.driver.get(url)
+            try:
+                title = self.driver.title.split('|')[0].strip()
+                price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
+                desc = self.driver.find_element(By.XPATH, "//div[@itemprop='description']").text
+                
                 try:
-                    title = self.driver.title.split('|')[0].strip()
-                    price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
-                    desc = self.driver.find_element(By.XPATH, "//div[@itemprop='description']").text
-                    
-                    try:
-                        date_text = self.driver.find_element(By.CSS_SELECTOR, "div[itemprop='upload_date'] span").text
-                        real_date = self.parse_vinted_date(date_text)
-                    except:
-                        real_date = datetime.now().strftime("%d-%m-%Y")
+                    date_text = self.driver.find_element(By.CSS_SELECTOR, "div[itemprop='upload_date'] span").text
+                    real_date = self.parse_vinted_date(date_text)
+                except:
+                    real_date = datetime.now().strftime("%d-%m-%Y")
 
-                    folder_item = os.path.join(self.base_dir, f"item_{int(time.time())}_{i}")
-                    os.makedirs(folder_item, exist_ok=True)
-                    imgs = [im.get_attribute('src') for im in self.driver.find_elements(By.XPATH, "//div[contains(@class, 'item-photo')]//img")]
-                    img_list = []
-                    for j, img_url in enumerate(list(set(imgs))[:20]):
-                        r = requests.get(img_url)
-                        p = os.path.join(folder_item, f"img_{j}.jpg")
-                        with open(p, 'wb') as f_img: f_img.write(r.content)
-                        img_list.append(os.path.abspath(p))
-                    
-                    writer.writerow([title, price, desc, ";".join(img_list), url, real_date])
-                    f.flush()
-                except: continue
+                folder_item = os.path.join(self.base_dir, f"item_{int(time.time())}_{i}")
+                os.makedirs(folder_item, exist_ok=True)
+                imgs = [im.get_attribute('src') for im in self.driver.find_elements(By.XPATH, "//div[contains(@class, 'item-photo')]//img")]
+                img_list = []
+                for j, img_url in enumerate(list(set(imgs))[:20]):
+                    r = requests.get(img_url)
+                    p = os.path.join(folder_item, f"img_{j}.jpg")
+                    with open(p, 'wb') as f_img: f_img.write(r.content)
+                    img_list.append(os.path.abspath(p))
+                
+                # Ajouter au début de la liste temporaire des nouveaux
+                new_entries.append({
+                    "Titre": title, "Prix": price, "Description": desc, 
+                    "Images": ";".join(img_list), "URL": url, "Date_Ajout": real_date
+                })
+            except: continue
+
+        # 3. Ecriture finale : Nouveaux d'abord, puis Anciens
+        if new_entries or reset:
+            final_data = new_entries + ([] if reset else existing_rows)
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(final_data)
+            print(f"💾 {len(new_entries)} nouvel(s) article(s) ajouté(s) en haut du fichier.")
 
     def run_menu(self):
         while True:
