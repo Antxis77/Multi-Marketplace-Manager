@@ -1,27 +1,29 @@
-# 🛒 Vinted Pro Bot - v1.1
+# 🛒 Multi Marketplace Manager - v1.2
 
-**Vinted Pro Bot** est un outil d'automatisation puissant conçu pour les vendeurs Vinted souhaitant gérer leur inventaire et optimiser leurs ventes. Il permet de sauvegarder l'intégralité d'un dressing (images, descriptions, prix) et facilite la republication pour booster la visibilité des articles.
+![Version](https://img.shields.io/badge/version-1.2-blue.svg)
+![Safety](https://img.shields.io/badge/security-anti--detection-orange.svg)
+![Python](https://img.shields.io/badge/python-3.8+-green.svg)
+
+**Multi Marketplace Manager** (anciennement Vinted Pro Bot) est un outil d'automatisation puissant conçu pour les vendeurs souhaitant centraliser la gestion de leur inventaire. Il permet de sauvegarder l'intégralité d'un dressing (images, descriptions, prix) et facilite la republication pour booster la visibilité.
 
 ---
 
 ## 🚀 Fonctionnalités Clés
 
-### 📦 Gestion d'Inventaire
+### 🛡️ Sécurité & Anti-Détection (Nouveau v1.2)
+* **Bypass Avancé** : Masquage des signatures d'automatisation (`AutomationControlled`) et du flag `webdriver` au sein du navigateur.
+* **User-Agent Spoofing** : Simule une navigation réelle sous macOS/Chrome pour éviter les blocages de type "comportement inhabituel".
+* **Humane-Typing & Injection JS** : Mélange de frappe clavier réelle (pour le prix) et d'injection JavaScript (pour les titres et descriptions) afin de supporter 100% des **emojis** sans erreur.
 
-* **Scan Intégral** : Grâce au défilement automatique (*Auto-Scroll*), le bot récupère 100% de vos annonces, même les plus anciennes cachées par le chargement dynamique.
-* **Calcul de Date Réel** : Le bot convertit les textes de type "Il y a 3 semaines" en dates précises (ex: `01-12-2025`) dans votre fichier CSV.
-* **Sauvegarde Locale** : Téléchargement automatique de toutes les images et des données dans des dossiers organisés par ID membre.
+### 📦 Gestion d'Inventaire & Sync Miroir
+* **Synchronisation Automatique** : Lors d'un scan, le bot détecte les articles vendus ou supprimés sur Vinted et les retire automatiquement de votre fichier `inventaire.csv`.
+* **Scan Intégral** : Récupération de 100% des annonces via un défilement intelligent (*Auto-Scroll*) qui force le chargement dynamique.
+* **Sauvegarde Organisée** : Téléchargement des données et images dans des dossiers structurés et isolés par ID membre.
 
-### 🔄 Republication Simplifiée
-
-* **Flux Accéléré** : Temps de chargement des photos optimisé à **5 secondes**.
-* **Nettoyage Automatique** : Une fois republié, l'article est retiré du CSV. Un nouveau "Scan" le rajoutera avec sa nouvelle date de mise à jour.
-* **Rotation Intelligente** : Possibilité de republier les "X derniers" articles ajoutés à l'inventaire.
-
-### 👥 Multi-Compte (Nouveau en V1.1)
-
-* **Isolation Totale** : Chaque compte possède son propre historique et sa propre session Chrome (évite les déconnexions intempestives).
-* **Changement Rapide** : Basculez entre vos différents profils directement depuis le menu.
+### 🔄 Republication Intelligente
+* **Rappel d'ID** : Affichage systématique de l'ID de l'article en cours de traitement dans la console pour un suivi précis.
+* **Nettoyage Post-Publication** : Retrait immédiat de l'article du CSV après validation pour éviter les doublons accidentels.
+* **Gestion Multi-Compte** : Isolation complète des cookies, du cache et de l'historique par utilisateur.
 
 ---
 
@@ -29,55 +31,58 @@
 
 1. **Cloner le projet**
 ```bash
-git clone https://github.com/votre-utilisateur/vinted-pro-bot.git
-cd vinted-pro-bot
-
+git clone [https://github.com/Antxis77/multi-marketplace-manager.git](https://github.com/Antxis77/multi-marketplace-manager.git)
+cd multi-marketplace-manager
 ```
 
+Installer les dépendances
 
-2. **Installer les dépendances**
 ```bash
-pip install undetected-chromedriver requests
 
+pip install undetected-chromedriver requests
 ```
 
+Configurer Chrome Vérifiez que Google Chrome est installé.
 
-3. **Configurer Chrome**
-Vérifiez que Google Chrome est installé sur votre machine. Le script est configuré par défaut pour macOS (`/Applications/Google Chrome.app/...`). *Si vous êtes sur Windows, modifiez le chemin `binary_location` dans le script.*
+Note : Sur macOS, le chemin est détecté automatiquement. Sur Windows, veillez à modifier le chemin binary_location dans le code source pour pointer vers votre chrome.exe.
 
----
-
-## 📖 Utilisation
-
+📖 Utilisation
 Lancez le script avec :
 
 ```bash
+
 python main.py
 
 ```
+Le Menu :
 
-### Le Menu :
+  0 🔑 Connexion / Chrome : Recommandé avant toute action. Ouvre Chrome pour vous connecter. Naviguez manuellement quelques secondes pour valider les cookies.
 
-* **`0` 🔑 Connexion / Chrome** : Ouvre une instance Chrome avec votre session sauvegardée.
-* **`1` 🚮 Reset Scan** : Efface tout l'historique local et rescane tout le dressing.
-* **`2` 🔄 Scan Nouveau** : Ajoute uniquement les nouveaux articles détectés sur votre profil.
-* **`3` 🚀 Republier les X derniers** : Aide à la republication manuelle assistée des dernières annonces du CSV.
-* **`4` 📤 Republier par ID** : Publie un article spécifique via une partie de son URL.
-* **`C` 👤 Changer de Compte** : Saisissez un nouvel ID Vinted pour changer de dossier de travail.
-* **`Q` ❌ Quitter** : Ferme proprement le bot et le navigateur.
+  1 🚮 Reset Scan : Efface l'historique local, synchronise le stock actuel et rescane l'intégralité du dressing.
 
----
+  2 🔄 Scan Nouveau : Met à jour l'inventaire : ajoute les nouveaux articles et retire ceux qui ne sont plus en ligne.
 
-## 📁 Structure des fichiers
+  3 🚀 Republier les X derniers : Lance la procédure assistée pour les articles les plus récents de votre fichier.
 
-* `vinted_backup/{ID_MEMBRE}/` : Contient vos images et le fichier `inventaire.csv`.
-* `chrome_profile/{ID_MEMBRE}/` : Stocke vos cookies de connexion Vinted (ne pas partager).
-* `config.txt` : Mémorise le dernier ID membre utilisé.
+  4 📤 Republier par ID : Cible un article spécifique via son identifiant unique Vinted.
 
----
+  C 👤 Changer de Compte : Bascule instantanément sur un autre ID membre (crée un nouveau dossier dédié).
 
-## ⚠️ Avertissement
+  Q ❌ Quitter : Ferme proprement les sessions Chrome et le script.
 
-Cet outil est destiné à un usage personnel uniquement. L'automatisation peut aller à l'encontre des conditions d'utilisation de Vinted. Utilisez-le de manière responsable avec des délais raisonnables.
+📁 Structure des fichiers
 
----
+vinted_backup/{ID_MEMBRE}/ : Contient les sous-dossiers d'images et le fichier inventaire.csv.
+
+chrome_profile/{ID_MEMBRE}/ : Stocke les cookies et sessions isolées pour chaque compte.
+
+config.txt : Fichier système mémorisant le dernier ID utilisé.
+
+⚠️ Avertissement & Conseils de sécurité
+Cet outil est destiné à un usage personnel uniquement. Pour éviter les détections :
+
+Utilisez une IP mobile (partage de connexion 4G/5G) si vous avez un grand volume d'articles.
+
+Espacez vos actions : Évitez de republier plus de 10 articles à la suite sans pause.
+
+Comportement humain : Utilisez régulièrement l'option 0 pour effectuer quelques actions manuelles (liker un article, faire une recherche).
