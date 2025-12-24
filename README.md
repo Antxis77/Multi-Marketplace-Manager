@@ -31,7 +31,7 @@
 
 1. **Cloner le projet**
 ```bash
-git clone [https://github.com/votre-utilisateur/multi-marketplace-manager.git](https://github.com/votre-utilisateur/multi-marketplace-manager.git)
+git clone [https://github.com/Antxis77/multi-marketplace-manager.git](https://github.com/Antxis77/multi-marketplace-manager.git)
 cd multi-marketplace-manager
 ```
 
