@@ -3,7 +3,8 @@ import time
 import shutil
 import csv
 import requests
-import sys
+import random
+import re
 from datetime import datetime, timedelta
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -42,21 +43,37 @@ class VintedProBot:
 
     def start_driver(self):
         if not self.driver:
-            print(f"🚀 Lancement Chrome | Profil : {self.member_id}...")
+            print(f"🚀 Lancement Chrome Anti-Détection | Profil : {self.member_id}...")
             options = uc.ChromeOptions()
             options.add_argument(f"--user-data-dir={self.profile_dir}")
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
             options.add_argument("--window-size=1920,1080")
             self.driver = uc.Chrome(options=options, use_subprocess=True)
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+    def human_type(self, element, text):
+        element.clear()
+        time.sleep(0.5)
+        for char in text:
+            element.send_keys(char)
+            time.sleep(random.uniform(0.1, 0.25))
+
+    def fast_copy_paste(self, element, text):
+        self.driver.execute_script("arguments[0].value = arguments[1];", element, text)
+        element.send_keys(Keys.SPACE + Keys.BACKSPACE)
+
+    def extract_id(self, url):
+        match = re.search(r'/items/(\d+)', url)
+        return match.group(1) if match else "Inconnu"
 
     def parse_vinted_date(self, text):
         now = datetime.now()
         t = text.lower()
         try:
-            if any(x in t for x in ["instant", "seconde", "minute", "heure"]):
-                return now.strftime("%d-%m-%Y")
-            if "hier" in t:
-                return (now - timedelta(days=1)).strftime("%d-%m-%Y")
+            if any(x in t for x in ["instant", "seconde", "minute", "heure"]): return now.strftime("%d-%m-%Y")
+            if "hier" in t: return (now - timedelta(days=1)).strftime("%d-%m-%Y")
             numbers = [int(s) for s in t.split() if s.isdigit()]
             num = numbers[0] if numbers else 1
             if "jour" in t: delta = timedelta(days=num)
@@ -68,72 +85,83 @@ class VintedProBot:
         except: return now.strftime("%d-%m-%Y")
 
     def remove_from_csv(self, item_url):
-        """Supprime définitivement l'article du CSV après republication"""
         if not os.path.exists(self.csv_path): return
         rows = []
-        found = False
+        with open(self.csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            rows = [row for row in reader if row['URL'] != item_url]
+        with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def sync_cleanup(self, online_urls):
+        """Supprime du CSV les articles qui ne sont plus en ligne"""
+        if not os.path.exists(self.csv_path): return
+        print("🧹 Nettoyage de l'inventaire (recherche d'articles vendus/supprimés)...")
+        rows_to_keep = []
+        count_removed = 0
         with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             fieldnames = reader.fieldnames
             for row in reader:
-                if row['URL'] != item_url:
-                    rows.append(row)
+                if row['URL'] in online_urls:
+                    rows_to_keep.append(row)
                 else:
-                    found = True
+                    count_removed += 1
         
-        if found:
+        if count_removed > 0:
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(rows)
-            print(f"🗑️ Article retiré de l'inventaire (sera ré-ajouté au prochain scan).")
+                writer.writerows(rows_to_keep)
+            print(f"✅ Nettoyage terminé : {count_removed} article(s) retiré(s) du fichier car absents de Vinted.")
+        else:
+            print("✅ Inventaire déjà à jour, rien à supprimer.")
+
+    def fill_vinted_form(self, item):
+        item_id = self.extract_id(item['URL'])
+        try:
+            print(f"\n📢 Remplissage : {item['Titre'][:30]}... [ID: {item_id}]")
+            self.driver.get("https://www.vinted.fr/items/new")
+            WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))).send_keys("\n".join(item['Images'].split(";")))
+            print("⏳ Upload Photos (7s)...")
+            time.sleep(7) 
+            time.sleep(random.uniform(1.5, 3.0))
+            self.fast_copy_paste(self.driver.find_element(By.ID, "title"), item['Titre'])
+            time.sleep(random.uniform(1.5, 3.0))
+            self.fast_copy_paste(self.driver.find_element(By.ID, "description"), item['Description'])
+            time.sleep(random.uniform(1.0, 2.0))
+            price_el = self.driver.find_element(By.NAME, "price")
+            self.human_type(price_el, item['Prix'].replace(',', '.'))
+            print(f"✨ Formulaire prêt !")
+            input(f"✅ Validez 'Ajouter' sur Chrome, puis ENTRÉE ici pour supprimer l'ID {item_id}...")
+            self.remove_from_csv(item['URL'])
+        except Exception as e: print(f"⚠️ Erreur : {e}")
 
     def scroll_to_bottom(self):
         last_height = self.driver.execute_script("return document.body.scrollHeight")
         while True:
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
+            time.sleep(random.uniform(2.5, 4.0))
             new_height = self.driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height: break
             last_height = new_height
 
-    def robust_fill(self, element, text):
-        try:
-            text_clean = text.replace('"', '\\"').replace('\n', '\\n')
-            self.driver.execute_script(f'arguments[0].value = "{text_clean}";', element)
-            element.send_keys(Keys.SPACE + Keys.BACKSPACE)
-        except: pass
-
-    def fill_vinted_form(self, item):
-        try:
-            print(f"\n📢 Publication : {item['Titre'][:40]}...")
-            self.driver.get("https://www.vinted.fr/items/new")
-            WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))).send_keys("\n".join(item['Images'].split(";")))
-            print("⏳ Photos (5s)...")
-            time.sleep(5) 
-            self.robust_fill(self.driver.find_element(By.ID, "title"), item['Titre'])
-            self.robust_fill(self.driver.find_element(By.ID, "description"), item['Description'])
-            price = self.driver.find_element(By.NAME, "price")
-            price.clear()
-            price.send_keys(item['Prix'].replace(',', '.'))
-            print("\n✨ Formulaire prêt !"); input("✅ Validez sur Chrome, puis ENTRÉE ici pour supprimer de la liste...")
-            self.remove_from_csv(item['URL'])
-        except Exception as e: print(f"⚠️ Erreur formulaire : {e}")
-
     def get_items_urls(self):
-        self.driver.get(f"https://www.vinted.fr/member/{self.member_id}"); time.sleep(4)
+        self.driver.get(f"https://www.vinted.fr/member/{self.member_id}")
+        time.sleep(random.uniform(4.0, 6.0))
         self.scroll_to_bottom()
         items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
-        return list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
+        urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
+        # Lancer le nettoyage automatique après avoir récupéré la liste fraîche
+        self.sync_cleanup(urls)
+        return urls
 
     def save_process(self, urls, reset=False):
         if reset and os.path.exists(self.base_dir):
-            for filename in os.listdir(self.base_dir):
-                file_path = os.path.join(self.base_dir, filename)
-                try:
-                    if os.path.isfile(file_path): os.unlink(file_path)
-                    elif os.path.isdir(file_path): shutil.rmtree(file_path)
-                except: pass
+            shutil.rmtree(self.base_dir); os.makedirs(self.base_dir)
         history = [] if reset else self.get_already_scrapped_urls()
         file_exists = os.path.exists(self.csv_path)
         with open(self.csv_path, 'a' if file_exists and not reset else 'w', newline='', encoding='utf-8') as f:
@@ -142,7 +170,9 @@ class VintedProBot:
                 writer.writerow(["Titre", "Prix", "Description", "Images", "URL", "Date_Ajout"])
             for i, url in enumerate(urls):
                 if url in history: continue
-                self.driver.get(url); time.sleep(3)
+                print(f"🔍 Scan article {i+1}/{len(urls)}... (Sécurité)")
+                time.sleep(random.uniform(7.0, 14.0)) # Délai plus long pour éviter le ban
+                self.driver.get(url)
                 try:
                     title = self.driver.title.split('|')[0].strip()
                     price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
@@ -159,7 +189,8 @@ class VintedProBot:
                         with open(p, 'wb') as f_img: f_img.write(r.content)
                         img_list.append(os.path.abspath(p))
                     writer.writerow([title, price, desc, ";".join(img_list), url, real_date])
-                    f.flush(); print(f"✨ Sauvegardé : {title[:25]} | {real_date}")
+                    f.flush()
+                    print(f"✨ Sauvegardé : {title[:20]}...")
                 except: continue
 
     def get_already_scrapped_urls(self):
@@ -170,11 +201,11 @@ class VintedProBot:
     def run_menu(self):
         while True:
             print("\n" + "═"*50)
-            print(f"   VINTED PRO v1.1 | COMPTE : {self.member_id}")
+            print(f"   VINTED PRO v1.2 | COMPTE : {self.member_id}")
             print("═"*50)
-            print(" 0. 🔑 Connexion / Chrome")
-            print(" 1. 🚮 Reset Scan (Tout refaire)")
-            print(" 2. 🔄 Scan Nouveau (Ajouter)")
+            print(" 0. 🔑 Connexion / Chrome (Bypass Ban)")
+            print(" 1. 🚮 Reset Scan (Tout refaire + Nettoyage)")
+            print(" 2. 🔄 Scan Nouveau (Ajouter + Nettoyage)")
             print(" 3. 🚀 Republier les X derniers")
             print(" 4. 📤 Republier par ID")
             print(" C. 👤 Changer de Compte")
@@ -192,7 +223,7 @@ class VintedProBot:
                         annonces = list(csv.DictReader(f))[-int(num):]
                     for a in annonces:
                         self.driver.get(a['URL'])
-                        input(f"🗑️ Supprimez '{a['Titre'][:20]}' puis ENTRÉE...")
+                        input(f"🗑️ Supprimez l'article {self.extract_id(a['URL'])} puis ENTRÉE...")
                         self.fill_vinted_form(a)
             elif c == "4":
                 item_id = input(" ID Article : ").strip()
@@ -204,7 +235,6 @@ class VintedProBot:
             elif c == "C":
                 new_id = input(" Nouvel ID : ").strip()
                 if new_id: set_config_id(new_id); self.load_account_config()
-                print(f"✅ Basculé sur {new_id}")
             elif c == "Q":
                 if self.driver: self.driver.quit()
                 break
