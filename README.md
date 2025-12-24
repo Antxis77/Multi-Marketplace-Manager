@@ -1,88 +1,89 @@
-# 🛒 Multi Marketplace Manager - v1.2
+# 🛒 Multi Marketplace Manager - v1.4
 
-![Version](https://img.shields.io/badge/version-1.2-blue.svg)
-![Safety](https://img.shields.io/badge/security-anti--detection-orange.svg)
-![Python](https://img.shields.io/badge/python-3.8+-green.svg)
-
-**Multi Marketplace Manager** (anciennement Vinted Pro Bot) est un outil d'automatisation puissant conçu pour les vendeurs souhaitant centraliser la gestion de leur inventaire. Il permet de sauvegarder l'intégralité d'un dressing (images, descriptions, prix) et facilite la republication pour booster la visibilité.
+**Multi Marketplace Manager** est un outil d'automatisation professionnel conçu pour la gestion et la sauvegarde d'inventaires sur Vinted. La version 1.4 marque un tournant majeur dans la furtivité en remplaçant les actions mécaniques par des **simulations comportementales humaines**.
 
 ---
 
-## 🚀 Fonctionnalités Clés
+## 🚀 Nouveautés de la v1.4
 
-### 🛡️ Sécurité & Anti-Détection (Nouveau v1.2)
-* **Bypass Avancé** : Masquage des signatures d'automatisation (`AutomationControlled`) et du flag `webdriver` au sein du navigateur.
-* **User-Agent Spoofing** : Simule une navigation réelle sous macOS/Chrome pour éviter les blocages de type "comportement inhabituel".
-* **Humane-Typing & Injection JS** : Mélange de frappe clavier réelle (pour le prix) et d'injection JavaScript (pour les titres et descriptions) afin de supporter 100% des **emojis** sans erreur.
+### 🧠 Simulation du Comportement Humain (Nouveau)
 
-### 📦 Gestion d'Inventaire & Sync Miroir
-* **Synchronisation Automatique** : Lors d'un scan, le bot détecte les articles vendus ou supprimés sur Vinted et les retire automatiquement de votre fichier `inventaire.csv`.
-* **Scan Intégral** : Récupération de 100% des annonces via un défilement intelligent (*Auto-Scroll*) qui force le chargement dynamique.
-* **Sauvegarde Organisée** : Téléchargement des données et images dans des dossiers structurés et isolés par ID membre.
+* **Mouse Pathing (ActionChains)** : Le curseur ne "téléporte" plus sur les boutons. Le bot simule des mouvements de souris fluides vers les champs de saisie avant d'interagir.
+* **Scroll Progressif & Aléatoire** : Remplacement du défilement instantané par un scroll par paliers irréguliers, simulant un utilisateur qui consulte ses annonces ou lit une description.
+* **Micro-Pauses Cognitives** : Ajout de temps d'attente aléatoires entre chaque action (frappe, clic, upload) pour casser la régularité détectable par les algorithmes.
 
-### 🔄 Republication Intelligente
-* **Rappel d'ID** : Affichage systématique de l'ID de l'article en cours de traitement dans la console pour un suivi précis.
-* **Nettoyage Post-Publication** : Retrait immédiat de l'article du CSV après validation pour éviter les doublons accidentels.
-* **Gestion Multi-Compte** : Isolation complète des cookies, du cache et de l'historique par utilisateur.
+### 🛡️ Sécurité Renforcée
+
+* **Antidétection Hardware** : Désactivation du WebGL et masquage des empreintes GPU pour limiter le *Canvas Fingerprinting*.
+* **Isolation Totale** : Chaque compte possède son propre dossier de profil Chrome, ses propres cookies et son propre cache, rendant les comptes indépendants les uns des autres.
+* **Langue & User-Agent** : Forçage des paramètres de navigation en `fr-FR` pour garantir une cohérence parfaite avec l'adresse IP de connexion.
+
+### 📊 Optimisation de l'Inventaire
+
+* **Tri Antéchronologique** : Les nouveaux articles scannés sont désormais ajoutés **en haut** du fichier CSV. Vos articles les plus récents sont toujours les premiers accessibles.
+* **Sync Miroir Intelligente** : Nettoyage automatique du stock local si un article est supprimé ou vendu sur la plateforme.
 
 ---
 
 ## 🛠 Installation
 
 1. **Cloner le projet**
+
 ```bash
-git clone [https://github.com/Antxis77/multi-marketplace-manager.git](https://github.com/Antxis77/multi-marketplace-manager.git)
+git clone https://github.com/Antxis77/multi-marketplace-manager.git
 cd multi-marketplace-manager
+
 ```
 
-Installer les dépendances
+2. **Installer les dépendances**
 
 ```bash
-
 pip install undetected-chromedriver requests
+
 ```
 
-Configurer Chrome Vérifiez que Google Chrome est installé.
+3. **Configuration**
+Vérifiez que Google Chrome est installé. Le script générera un fichier `config.txt` au premier lancement pour mémoriser vos préférences (Chemin Chrome, ID Membre, etc.).
 
-Note : Sur macOS, le chemin est détecté automatiquement. Sur Windows, veillez à modifier le chemin binary_location dans le code source pour pointer vers votre chrome.exe.
+---
 
-📖 Utilisation
+## 📖 Utilisation
+
 Lancez le script avec :
 
 ```bash
-
 python main.py
 
 ```
-Le Menu :
 
-  0 🔑 Connexion / Chrome : Recommandé avant toute action. Ouvre Chrome pour vous connecter. Naviguez manuellement quelques secondes pour valider les cookies.
+### Le Menu :
 
-  1 🚮 Reset Scan : Efface l'historique local, synchronise le stock actuel et rescane l'intégralité du dressing.
+* **`0` 🔑 Connexion / Chrome** : Ouvre une session pour vous connecter manuellement et stabiliser les cookies.
+* **`1` 🚮 Reset Scan** : Efface tout et reconstruit l'inventaire complet (Plus récent en haut).
+* **`2` 🔄 Scan Nouveau** : Ajoute uniquement les pépites récemment postées sans toucher au reste.
+* **`3` 🚀 Republier les X derniers** : Automatisé avec mouvements de souris humains sur les articles en haut de liste.
+* **`4` 📤 Republier par ID** : Pour cibler précisément une pièce de votre stock.
+* **`P` 📍 Paramètres** : Modifiez à la volée le chemin de Chrome ou le nom de votre fichier CSV.
 
-  2 🔄 Scan Nouveau : Met à jour l'inventaire : ajoute les nouveaux articles et retire ceux qui ne sont plus en ligne.
+---
 
-  3 🚀 Republier les X derniers : Lance la procédure assistée pour les articles les plus récents de votre fichier.
+## 📁 Structure des dossiers
 
-  4 📤 Republier par ID : Cible un article spécifique via son identifiant unique Vinted.
+* `vinted_backup/{ID_MEMBRE}/` : Vos photos et le fichier `inventaire.csv`.
+* `chrome_profile/{ID_MEMBRE}/` : Données de navigation isolées (très important pour l'anti-ban).
 
-  C 👤 Changer de Compte : Bascule instantanément sur un autre ID membre (crée un nouveau dossier dédié).
+---
 
-  Q ❌ Quitter : Ferme proprement les sessions Chrome et le script.
+## ⚠️ Conseils de "Survie" (Anti-Ban)
 
-📁 Structure des fichiers
+Pour maximiser la longévité de vos comptes avec la v1.4 :
 
-vinted_backup/{ID_MEMBRE}/ : Contient les sous-dossiers d'images et le fichier inventaire.csv.
+1. **IP Tournante** : Utilisez un partage de connexion mobile. Activez le **mode avion** quelques secondes entre chaque changement de compte pour renouveler votre adresse IP.
+2. **Volume Raisonnable** : Ne republiez pas 50 articles d'un coup. Procédez par vagues de 10 à 15 articles.
+3. **Préchauffage** : Après une connexion sur un nouveau profil, naviguez 2-3 minutes manuellement (option 0) avant de lancer un scan.
 
-chrome_profile/{ID_MEMBRE}/ : Stocke les cookies et sessions isolées pour chaque compte.
+---
 
-config.txt : Fichier système mémorisant le dernier ID utilisé.
+*Développé pour un usage éducatif et personnel. Respectez les conditions d'utilisation de la plateforme.*
 
-⚠️ Avertissement & Conseils de sécurité
-Cet outil est destiné à un usage personnel uniquement. Pour éviter les détections :
-
-Utilisez une IP mobile (partage de connexion 4G/5G) si vous avez un grand volume d'articles.
-
-Espacez vos actions : Évitez de republier plus de 10 articles à la suite sans pause.
-
-Comportement humain : Utilisez régulièrement l'option 0 pour effectuer quelques actions manuelles (liker un article, faire une recherche).
+---

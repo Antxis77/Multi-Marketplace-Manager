@@ -12,6 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 
 # --- GESTION DE LA CONFIGURATION ---
 def get_config():
@@ -77,6 +78,30 @@ class VintedProBot:
         print(f"🔹 Chemin Chrome  : {self.chrome_path}")
         print("─"*55)
 
+    # --- NOUVELLES FONCTIONS DE COMPORTEMENT HUMAIN ---
+    def human_scroll(self):
+        """Scroll progressif simulant une lecture humaine."""
+        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        current_pos = 0
+        while current_pos < last_height:
+            # Scroll par bonds aléatoires entre 300 et 700 pixels
+            step = random.randint(300, 700)
+            current_pos += step
+            self.driver.execute_script(f"window.scrollTo(0, {current_pos});")
+            time.sleep(random.uniform(0.6, 1.4))
+            last_height = self.driver.execute_script("return document.body.scrollHeight")
+            if current_pos > last_height: break
+
+    def human_mouse_move(self, element):
+        """Simule un mouvement de souris vers un élément avant d'agir."""
+        try:
+            actions = ActionChains(self.driver)
+            actions.move_to_element(element)
+            actions.pause(random.uniform(0.3, 0.8))
+            actions.perform()
+        except:
+            pass
+
     def parse_vinted_date(self, text):
         now = datetime.now()
         t = text.lower()
@@ -106,7 +131,9 @@ class VintedProBot:
             options.add_argument(f"--user-data-dir={self.profile_dir}")
             options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            
+            options.add_argument('--disable-webgl')
+            options.add_argument('--lang=fr-FR')
+
             if platform.system() == "Windows":
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-gpu')
@@ -121,8 +148,11 @@ class VintedProBot:
                 print(f"❌ Erreur lancement Chrome : {e}")
 
     def fast_copy_paste(self, element, text):
+        # Utilisation du mouvement de souris avant d'écrire
+        self.human_mouse_move(element)
         self.driver.execute_script("arguments[0].value = arguments[1];", element, text)
         element.send_keys(Keys.SPACE + Keys.BACKSPACE)
+        time.sleep(random.uniform(0.5, 1.0))
 
     def extract_id(self, url):
         match = re.search(r'/items/(\d+)', url)
@@ -148,15 +178,22 @@ class VintedProBot:
         try:
             print(f"\n📢 Remplissage : {item['Titre'][:30]}...")
             self.driver.get("https://www.vinted.fr/items/new")
-            WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))).send_keys("\n".join(item['Images'].split(";")))
+            
+            # Attendre et simuler mouvement vers l'upload
+            file_btn = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
+            file_btn.send_keys("\n".join(item['Images'].split(";")))
+            
             time.sleep(7) 
             self.fast_copy_paste(self.driver.find_element(By.ID, "title"), item['Titre'])
             time.sleep(1.5)
             self.fast_copy_paste(self.driver.find_element(By.ID, "description"), item['Description'])
             time.sleep(1.5)
+            
             price_el = self.driver.find_element(By.NAME, "price")
+            self.human_mouse_move(price_el) # Mouvement souris vers prix
             price_el.clear()
             price_el.send_keys(item['Prix'].replace(',', '.'))
+            
             print(f"✨ Formulaire prêt ! ID original : {item_id}")
             input(f"✅ Validez sur Chrome, puis ENTRÉE ici pour retirer l'article du stock...")
             self.remove_from_csv(item['URL'])
@@ -178,13 +215,9 @@ class VintedProBot:
         print(f"🔍 Accès au profil membre {self.member_id}...")
         self.driver.get(f"https://www.vinted.fr/member/{self.member_id}")
         time.sleep(5)
-        last_height = self.driver.execute_script("return document.body.scrollHeight")
-        while True:
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)
-            new_height = self.driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height: break
-            last_height = new_height
+        
+        # Remplacement du scroll brut par le scroll humain
+        self.human_scroll()
         
         items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
         urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
@@ -201,7 +234,6 @@ class VintedProBot:
         history_urls = []
         fieldnames = ["Titre", "Prix", "Description", "Images", "URL", "Date_Ajout"]
 
-        # 1. Charger l'existant si on ne reset pas
         if not reset and os.path.exists(self.csv_path):
             with open(self.csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
@@ -209,12 +241,16 @@ class VintedProBot:
                 history_urls = [row['URL'] for row in existing_rows]
 
         new_entries = []
-        # 2. Scanner les nouveaux
         for i, url in enumerate(urls):
             if url in history_urls: continue
             print(f"📦 Scraping {i+1}/{len(urls)}... ID: {self.extract_id(url)}")
-            time.sleep(random.uniform(8.0, 15.0))
+            time.sleep(random.uniform(6.0, 12.0))
             self.driver.get(url)
+            
+            # Petit scroll humain aléatoire sur la page de l'article pour simuler une lecture
+            if random.choice([True, False]):
+                self.driver.execute_script(f"window.scrollBy(0, {random.randint(200, 500)});")
+            
             try:
                 title = self.driver.title.split('|')[0].strip()
                 price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
@@ -236,14 +272,12 @@ class VintedProBot:
                     with open(p, 'wb') as f_img: f_img.write(r.content)
                     img_list.append(os.path.abspath(p))
                 
-                # Ajouter au début de la liste temporaire des nouveaux
                 new_entries.append({
                     "Titre": title, "Prix": price, "Description": desc, 
                     "Images": ";".join(img_list), "URL": url, "Date_Ajout": real_date
                 })
             except: continue
 
-        # 3. Ecriture finale : Nouveaux d'abord, puis Anciens
         if new_entries or reset:
             final_data = new_entries + ([] if reset else existing_rows)
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -256,7 +290,7 @@ class VintedProBot:
         while True:
             self.display_info()
             print("\n" + "═"*55)
-            print(f"   VINTED PRO v1.3 | COMPTE : {self.member_id}")
+            print(f"   VINTED PRO v1.4 | COMPTE : {self.member_id}")
             print("═"*55)
             print(" 0. 🔑 Connexion / Chrome")
             print(" 1. 🚮 Reset Scan (Tout refaire + Sync)")
