@@ -78,13 +78,10 @@ class VintedProBot:
         print(f"🔹 Chemin Chrome  : {self.chrome_path}")
         print("─"*55)
 
-    # --- NOUVELLES FONCTIONS DE COMPORTEMENT HUMAIN ---
     def human_scroll(self):
-        """Scroll progressif simulant une lecture humaine."""
         last_height = self.driver.execute_script("return document.body.scrollHeight")
         current_pos = 0
         while current_pos < last_height:
-            # Scroll par bonds aléatoires entre 300 et 700 pixels
             step = random.randint(300, 700)
             current_pos += step
             self.driver.execute_script(f"window.scrollTo(0, {current_pos});")
@@ -93,7 +90,6 @@ class VintedProBot:
             if current_pos > last_height: break
 
     def human_mouse_move(self, element):
-        """Simule un mouvement de souris vers un élément avant d'agir."""
         try:
             actions = ActionChains(self.driver)
             actions.move_to_element(element)
@@ -110,16 +106,13 @@ class VintedProBot:
                 return now.strftime("%d-%m-%Y")
             if "hier" in t: 
                 return (now - timedelta(days=1)).strftime("%d-%m-%Y")
-            
             numbers = [int(s) for s in t.split() if s.isdigit()]
             num = numbers[0] if numbers else 1
-            
             if "jour" in t: delta = timedelta(days=num)
             elif "semaine" in t: delta = timedelta(weeks=num)
             elif "mois" in t: delta = timedelta(days=num * 30)
             elif "an" in t: delta = timedelta(days=num * 365)
             else: return now.strftime("%d-%m-%Y")
-            
             return (now - delta).strftime("%d-%m-%Y")
         except:
             return now.strftime("%d-%m-%Y")
@@ -133,13 +126,10 @@ class VintedProBot:
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             options.add_argument('--disable-webgl')
             options.add_argument('--lang=fr-FR')
-
             if platform.system() == "Windows":
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-gpu')
-
             options.binary_location = self.chrome_path
-            
             try:
                 ver = self.chrome_version if self.chrome_version > 0 else None
                 self.driver = uc.Chrome(options=options, version_main=ver, use_subprocess=True)
@@ -148,7 +138,6 @@ class VintedProBot:
                 print(f"❌ Erreur lancement Chrome : {e}")
 
     def fast_copy_paste(self, element, text):
-        # Utilisation du mouvement de souris avant d'écrire
         self.human_mouse_move(element)
         self.driver.execute_script("arguments[0].value = arguments[1];", element, text)
         element.send_keys(Keys.SPACE + Keys.BACKSPACE)
@@ -160,41 +149,42 @@ class VintedProBot:
 
     def sync_cleanup(self, online_urls):
         if not os.path.exists(self.csv_path): return
-        print(f"🧹 Nettoyage de l'inventaire ({self.csv_filename})...")
+        print(f"🧹 Synchronisation de l'inventaire local...")
         rows_to_keep = []
+        removed_count = 0
         with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             fieldnames = reader.fieldnames
             for row in reader:
-                if row['URL'] in online_urls: rows_to_keep.append(row)
-        
-        with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows_to_keep)
+                if row['URL'] in online_urls:
+                    rows_to_keep.append(row)
+                else:
+                    removed_count += 1
+        if removed_count > 0:
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows_to_keep)
+            print(f"✅ {removed_count} article(s) (vendus ou supprimés) retirés du CSV.")
+        else:
+            print("✨ Inventaire déjà à jour.")
 
     def fill_vinted_form(self, item):
-        item_id = self.extract_id(item['URL'])
         try:
             print(f"\n📢 Remplissage : {item['Titre'][:30]}...")
             self.driver.get("https://www.vinted.fr/items/new")
-            
-            # Attendre et simuler mouvement vers l'upload
             file_btn = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']")))
             file_btn.send_keys("\n".join(item['Images'].split(";")))
-            
             time.sleep(7) 
             self.fast_copy_paste(self.driver.find_element(By.ID, "title"), item['Titre'])
             time.sleep(1.5)
             self.fast_copy_paste(self.driver.find_element(By.ID, "description"), item['Description'])
             time.sleep(1.5)
-            
             price_el = self.driver.find_element(By.NAME, "price")
-            self.human_mouse_move(price_el) # Mouvement souris vers prix
+            self.human_mouse_move(price_el)
             price_el.clear()
             price_el.send_keys(item['Prix'].replace(',', '.'))
-            
-            print(f"✨ Formulaire prêt ! ID original : {item_id}")
+            print(f"✨ Formulaire prêt !")
             input(f"✅ Validez sur Chrome, puis ENTRÉE ici pour retirer l'article du stock...")
             self.remove_from_csv(item['URL'])
         except Exception as e: print(f"⚠️ Erreur formulaire : {e}")
@@ -212,17 +202,47 @@ class VintedProBot:
             writer.writerows(rows)
 
     def get_items_urls(self):
-        print(f"🔍 Accès au profil membre {self.member_id}...")
+        print(f"🔍 Scan du profil {self.member_id} (Filtrage des articles vendus)...")
         self.driver.get(f"https://www.vinted.fr/member/{self.member_id}")
         time.sleep(5)
-        
-        # Remplacement du scroll brut par le scroll humain
         self.human_scroll()
         
-        items = self.driver.find_elements(By.XPATH, "//a[contains(@href, '/items/')]")
-        urls = list(dict.fromkeys([i.get_attribute('href') for i in items if i.get_attribute('href')]))
+        # On cible les cartes d'articles
+        cards = self.driver.find_elements(By.CSS_SELECTOR, "[data-testid^='grid-item']")
+        if not cards:
+            cards = self.driver.find_elements(By.CLASS_NAME, "feed-grid__item")
+
+        available_urls = []
+        sold_count = 0
         
-        print(f"✅ Scan terminé : {len(urls)} annonce(s) trouvée(s).")
+        for card in cards:
+            try:
+                # DÉTECTION PRÉCISE DU STATUT VENDU
+                # On cherche spécifiquement la balise de statut à l'intérieur de la carte
+                status_elements = card.find_elements(By.CSS_SELECTOR, "[data-testid='item-status']")
+                
+                is_sold = False
+                if status_elements:
+                    # Si le texte de l'élément status contient "vendu"
+                    if "vendu" in status_elements[0].text.lower():
+                        is_sold = True
+                
+                # Vérification secondaire par classe CSS (Success = Vendu)
+                if not is_sold and card.find_elements(By.CLASS_NAME, "web_ui__Cell__success"):
+                    is_sold = True
+
+                if not is_sold:
+                    link_el = card.find_element(By.TAG_NAME, "a")
+                    href = link_el.get_attribute('href')
+                    if href and "/items/" in href:
+                        available_urls.append(href)
+                else:
+                    sold_count += 1
+            except:
+                continue
+
+        urls = list(dict.fromkeys(available_urls))
+        print(f"✅ Scan terminé : {len(urls)} actifs | {sold_count} vendus ignorés.")
         self.sync_cleanup(urls)
         return urls
 
@@ -247,20 +267,22 @@ class VintedProBot:
             time.sleep(random.uniform(6.0, 12.0))
             self.driver.get(url)
             
-            # Petit scroll humain aléatoire sur la page de l'article pour simuler une lecture
-            if random.choice([True, False]):
-                self.driver.execute_script(f"window.scrollBy(0, {random.randint(200, 500)});")
-            
+            # Sécurité supplémentaire sur la page de l'article lui-même
+            if "vendu" in self.driver.page_source.lower() and i < 5: # Vérifie seulement les premiers pour gagner du temps
+                # On revérifie la présence de la balise status sur la page produit
+                status_on_page = self.driver.find_elements(By.CSS_SELECTOR, "[data-testid='item-status']")
+                if status_on_page and "vendu" in status_on_page[0].text.lower():
+                    print("⚠️ Article réellement vendu (confirmé sur page), ignoré.")
+                    continue
+
             try:
                 title = self.driver.title.split('|')[0].strip()
                 price = self.driver.find_elements(By.XPATH, "//*[contains(text(), '€')]")[0].text
                 desc = self.driver.find_element(By.XPATH, "//div[@itemprop='description']").text
-                
                 try:
                     date_text = self.driver.find_element(By.CSS_SELECTOR, "div[itemprop='upload_date'] span").text
                     real_date = self.parse_vinted_date(date_text)
-                except:
-                    real_date = datetime.now().strftime("%d-%m-%Y")
+                except: real_date = datetime.now().strftime("%d-%m-%Y")
 
                 folder_item = os.path.join(self.base_dir, f"item_{int(time.time())}_{i}")
                 os.makedirs(folder_item, exist_ok=True)
@@ -284,7 +306,7 @@ class VintedProBot:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(final_data)
-            print(f"💾 {len(new_entries)} nouvel(s) article(s) ajouté(s) en haut du fichier.")
+            print(f"💾 {len(new_entries)} nouvel(s) article(s) ajouté(s).")
 
     def run_menu(self):
         while True:
